@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -16,9 +17,9 @@ type EventHandlerInterface interface {
 }
 
 type EventDispatcherInterface interface {
-	Register(event string, handler EventHandlerInterface) error
-	Dispatch(event EventInterface) error
-	Remove(eventName string, handler EventHandlerInterface) error
-	Has(eventName string, handler EventHandlerInterface) bool
-	Clear() error
+	Register(ctx context.Context, event string, handler EventHandlerInterface) error
+	Dispatch(ctx context.Context, event EventInterface) error
+	Remove(ctx context.Context, event string, handler EventHandlerInterface) error
+	Has(ctx context.Context, event string, handler EventHandlerInterface) bool
+	Clear(ctx context.Context) error
 }

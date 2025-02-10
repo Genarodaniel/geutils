@@ -1,181 +1,198 @@
 package events
 
 import (
-	"sync"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 )
 
-type TestEvent struct {
-	Name    string
-	Payload interface{}
+func TestRegister(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	getEventName := "order.create"
+
+	t.Run("Should return error if the event are already registered", func(t *testing.T) {
+		handlerSpy := EventHandlerSpy{
+			Event: &EventSpy{},
+		}
+
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
+
+		err = dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.NotNil(t, err)
+		assert.EqualError(t, err, ErrHandlerAlreadyRegistered.Error())
+
+	})
+
+	t.Run("Should successful register a new event", func(t *testing.T) {
+		handlerSpy := EventHandlerSpy{
+			Event: &EventSpy{},
+		}
+
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.True(t, created)
+	})
 }
 
-type TestEventHandler struct {
-	ID int
+func TestClear(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	getEventName := "order.create"
+
+	t.Run("Should clear the event handler", func(t *testing.T) {
+		handlerSpy := EventHandlerSpy{
+			Event: &EventSpy{},
+		}
+
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
+
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.True(t, created)
+
+		dispatcher.Clear(ctx)
+
+		created = dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.False(t, created)
+
+	})
 }
 
-type EventDispatcherTestSuite struct {
-	suite.Suite
-	event           TestEvent
-	event2          TestEvent
-	handler         TestEventHandler
-	handler2        TestEventHandler
-	handler3        TestEventHandler
-	eventDispatcher *EventDispatcher
-}
+func TestHas(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	getEventName := "order.create"
 
-type MockHandler struct {
-	mock.Mock
-}
-
-func (e *TestEvent) GetDateTime() time.Time {
-	return time.Now()
-}
-
-func (e *TestEvent) GetName() string {
-	return e.Name
-}
-
-func (e *TestEvent) GetPayload() interface{} {
-	return e.Payload
-}
-
-func (h *TestEventHandler) Handle(event EventInterface, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-}
-
-func (m *MockHandler) Handle(event EventInterface, wg *sync.WaitGroup) {
-	defer wg.Done()
-	m.Called(event)
-
-}
-
-func (s *EventDispatcherTestSuite) SetupTest() {
-	s.eventDispatcher = NewEventDispatcher()
-	s.handler = TestEventHandler{
-		ID: 1,
+	handlerSpy := EventHandlerSpy{
+		Event: &EventSpy{},
 	}
-	s.handler2 = TestEventHandler{
-		ID: 2,
+
+	t.Run("Should return true when the event recently created", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
+
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.True(t, created)
+
+		dispatcher.Clear(ctx)
+
+	})
+
+	t.Run("Should return false when there's no event created", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.False(t, created)
+	})
+}
+
+func TestRemove(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	getEventName := "order.create"
+
+	handlerSpy := EventHandlerSpy{
+		Event: &EventSpy{},
 	}
-	s.handler3 = TestEventHandler{
-		ID: 3,
+
+	t.Run("Should not remove if the event is the same and the handler is different", func(t *testing.T) {
+		handlerSpy2 := EventHandlerSpy{
+			Event: &EventSpy{
+				GetNameResponse: "order.updated",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
+
+		dispatcher.Remove(ctx, getEventName, handlerSpy2)
+
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.True(t, created)
+
+		dispatcher.Clear(ctx)
+
+	})
+
+	t.Run("Should remove if the event exists with the same handler", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
+
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
+
+		dispatcher.Remove(ctx, getEventName, handlerSpy)
+
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.False(t, created)
+
+		dispatcher.Clear(ctx)
+
+	})
+}
+
+func TestDispatch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	getEventName := "order.create"
+	timeResponse := time.Now()
+	payloadResponse := map[string]string{
+		"order_id": uuid.NewString(),
 	}
 
-	s.event = TestEvent{Name: "test", Payload: "test"}
-	s.event2 = TestEvent{Name: "test2", Payload: "test2"}
-}
+	handlerSpy := EventHandlerSpy{
+		Event: &EventSpy{
+			GetNameResponse:     getEventName,
+			GetDateTimeResponse: timeResponse,
+			GetPayloadResponse:  payloadResponse,
+		},
+	}
 
-func (s *EventDispatcherTestSuite) TestEventDispatcher_Register() {
-	err := s.eventDispatcher.Register(s.event.GetName(), &s.handler)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
+	t.Run("Should return error if the event are not dispatched", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
 
-	err = s.eventDispatcher.Register(s.event.GetName(), &s.handler2)
-	s.Nil(err)
-	s.Equal(2, len(s.eventDispatcher.handlers[s.event.GetName()]))
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.False(t, created)
 
-	assert.Equal(s.T(), &s.handler, s.eventDispatcher.handlers[s.event.GetName()][0])
-	assert.Equal(s.T(), &s.handler2, s.eventDispatcher.handlers[s.event.GetName()][1])
-}
+		err := dispatcher.Dispatch(ctx, handlerSpy.Event)
+		assert.EqualError(t, err, ErrEventNotRegistered.Error())
+	})
 
-func (s *EventDispatcherTestSuite) TestEventDispatcher_Register_WithSameHandler() {
+	t.Run("Should dispatch the event", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		dispatcher := NewEventDispatcher()
 
-	err := s.eventDispatcher.Register(s.event.GetName(), &s.handler)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
+		err := dispatcher.Register(ctx, getEventName, handlerSpy)
+		assert.Nil(t, err)
 
-	err = s.eventDispatcher.Register(s.event.GetName(), &s.handler)
-	s.Equal(err, ErrHandlerAlreadyRegistered)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
+		created := dispatcher.Has(ctx, getEventName, handlerSpy)
+		assert.True(t, created)
 
-}
+		err = dispatcher.Dispatch(ctx, handlerSpy.Event)
+		assert.Nil(t, err)
 
-func (s *EventDispatcherTestSuite) TestEventDispatcher_Clear() {
+	})
 
-	//EVENT 1
-	err := s.eventDispatcher.Register(s.event.GetName(), &s.handler)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	err = s.eventDispatcher.Register(s.event.GetName(), &s.handler2)
-	s.Nil(err)
-	s.Equal(2, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	//event 2
-
-	err = s.eventDispatcher.Register(s.event2.GetName(), &s.handler3)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event2.GetName()]))
-
-	s.eventDispatcher.Clear()
-
-	s.Equal(0, len(s.eventDispatcher.handlers))
-
-}
-
-func (s *EventDispatcherTestSuite) TestEventDispatcher_Has() {
-	//EVENT 1
-	err := s.eventDispatcher.Register(s.event.GetName(), &s.handler)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	err = s.eventDispatcher.Register(s.event.GetName(), &s.handler2)
-	s.Nil(err)
-	s.Equal(2, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	assert.True(s.T(), s.eventDispatcher.Has(s.event.GetName(), &s.handler))
-	assert.True(s.T(), s.eventDispatcher.Has(s.event.GetName(), &s.handler2))
-
-}
-
-func (s *EventDispatcherTestSuite) TestEventDispatcher_Remove() {
-
-	//EVENT 1
-	err := s.eventDispatcher.Register(s.event.GetName(), &s.handler)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	err = s.eventDispatcher.Register(s.event.GetName(), &s.handler2)
-	s.Nil(err)
-	s.Equal(2, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	err = s.eventDispatcher.Remove(s.event.GetName(), &s.handler)
-	s.Nil(err)
-	s.Equal(1, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	err = s.eventDispatcher.Remove(s.event.GetName(), &s.handler2)
-	s.Nil(err)
-	s.Equal(0, len(s.eventDispatcher.handlers[s.event.GetName()]))
-
-	err = s.eventDispatcher.Remove(s.event.GetName(), &s.handler2)
-	s.Nil(err)
-
-}
-
-func (s *EventDispatcherTestSuite) TestEventDispatcher_Dispatch() {
-	eventHandler := &MockHandler{}
-	eventHandler.On("Handle", &s.event)
-
-	eventHandler2 := &MockHandler{}
-	eventHandler2.On("Handle", &s.event)
-
-	s.eventDispatcher.Register(s.event.GetName(), eventHandler)
-	s.eventDispatcher.Register(s.event.GetName(), eventHandler2)
-	s.eventDispatcher.Dispatch(&s.event)
-
-	eventHandler.AssertExpectations(s.T())
-	eventHandler.AssertExpectations(s.T())
-	eventHandler.AssertNumberOfCalls(s.T(), "Handle", 1)
-	eventHandler2.AssertNumberOfCalls(s.T(), "Handle", 1)
-}
-
-func TestSuite(t *testing.T) {
-	suite.Run(t, new(EventDispatcherTestSuite))
 }
