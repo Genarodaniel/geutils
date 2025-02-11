@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -155,9 +156,9 @@ func TestDispatch(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	getEventName := "order.create"
 	timeResponse := time.Now()
-	payloadResponse := map[string]string{
+	payloadResponse, _ := json.Marshal(map[string]string{
 		"order_id": uuid.NewString(),
-	}
+	})
 
 	handlerSpy := EventHandlerSpy{
 		Event: &EventSpy{

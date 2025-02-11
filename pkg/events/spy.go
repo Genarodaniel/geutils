@@ -12,7 +12,7 @@ type EventHandlerSpy struct {
 type EventSpy struct {
 	GetNameResponse     string
 	GetDateTimeResponse time.Time
-	GetPayloadResponse  any
+	GetPayloadResponse  []byte
 }
 
 func (e EventSpy) GetName() string {
@@ -23,7 +23,7 @@ func (e EventSpy) GetDateTime() time.Time {
 	return e.GetDateTimeResponse
 }
 
-func (e EventSpy) GetPayload() any {
+func (e EventSpy) GetPayload() []byte {
 	return e.GetPayloadResponse
 }
 

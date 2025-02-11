@@ -9,7 +9,7 @@ import (
 type EventInterface interface {
 	GetName() string
 	GetDateTime() time.Time
-	GetPayload() any
+	GetPayload() []byte
 }
 
 type EventHandlerInterface interface {
