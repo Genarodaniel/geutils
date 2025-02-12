@@ -1,4 +1,4 @@
-# Event-Driven Worker
+# Event-Driven Pattern
 
 This project implements a generic event-driven worker that can be used with various message brokers. It provides an event-dispatching mechanism where users only need to implement the event interface and handlers. The **EventDispatcher** is already implemented, making it easy to register and dispatch events.
 
